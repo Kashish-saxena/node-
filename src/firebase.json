@@ -1,0 +1,25 @@
+{
+  "functions": {
+    "source": ".",
+    "codebase": "default",
+    "ignore": [
+      "firebase.json",
+      "**/.*",
+      "**/node_modules/**"
+    ],
+    "runtime": "nodejs22"
+  },
+  "hosting": {
+    "public": "public",
+    "ignore": [
+      "firebase.json",
+      "**/.*",
+      "**/node_modules/**"
+    ],
+    "rewrites":[{
+      "source":"**",
+      "function":"api"
+    }]
+
+  }
+}
