@@ -6,7 +6,7 @@
 <body>
     <h1>Welcome to My Game!</h1>
     <script>
-        const socket = new WebSocket("wss://us-central1-flutter-game-d1737.cloudfunctions.net/websocket");
+        const socket = new WebSocket("https://us-central1-flutter-game-d1737.cloudfunctions.net/api");
         socket.onopen = () => console.log("Connected to WebSocket");
         socket.onmessage = (event) => console.log("Message from server:", event.data);
     </script>

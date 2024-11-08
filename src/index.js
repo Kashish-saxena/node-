@@ -1,24 +1,27 @@
+const cors = require("cors");
+const functions = require("firebase-functions");
 const express = require("express");
 const http = require("http");
 const WebSocket = require("ws");
-const cors = require("cors");
-const functions = require("firebase-functions");
-const { log, info, debug, warn, error, write } = require("firebase-functions/logger");
 
 // Create an Express app
 const app = express();
 app.use(cors()); 
-
 // Create HTTP server
 const server = http.createServer(app);
 
 // Create a WebSocket server
 const wss = new WebSocket.Server({ server });
 
+
 let waitingSessionQueue = [];
 let gameRooms = {};
 let playersWs = {};
 let connectedPlayers = {};
+
+app.get("/", (req, res) => {
+    res.send("WebSocket server is running");
+});
 
 // Handle WebSocket connections
 wss.on("connection", (ws) => {
@@ -50,7 +53,8 @@ wss.on("connection", (ws) => {
                 waitingSessionQueue.push({ deviceId, ws });
                 ws.send(JSON.stringify({
                     status: "waiting",
-                    message: "Waiting for opponent..."
+                    message: "Waiting for opponent...",
+                    waitingDeviceId: deviceId
                 }));
             } else {
                 const waitingDevice = waitingSessionQueue.shift();
@@ -60,13 +64,15 @@ wss.on("connection", (ws) => {
                 ws.send(JSON.stringify({
                     status: "connected",
                     roomId,
-                    secondDevice: waitingDevice.deviceId
+                    deviceId: deviceId,
+                    opponentDeviceId: waitingDevice.deviceId
                 }));
 
                 waitingDevice.ws.send(JSON.stringify({
                     status: "connected",
                     roomId,
-                    secondDevice: deviceId
+                    deviceId: waitingDevice.deviceId,
+                    opponentDeviceId: deviceId
                 }));
 
                 connectedPlayers[deviceId] = roomId;
@@ -130,7 +136,7 @@ exports.api = functions.https.onRequest((req, res) => {
 });
 
 // Start the server (commented out for Firebase deployment)
-// const PORT = 8080;
+// const PORT = 8081;
 // server.listen(PORT, () => {
 //     console.log("WebSocket server running on port " + PORT);
 // });
