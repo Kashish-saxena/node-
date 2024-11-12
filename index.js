@@ -48,8 +48,34 @@ wss.on("connection", (ws) => {
 
             // Handle score and Strength updates
             if (data.type === "scoreAndStrength") {
-                console.log("Received score " + data.deviceId + "-" + data.score, data.strength, data.isGameOver, data.opponentId);
-                broadcastScoreUpdate(data.deviceId, data.score, data.strength, data.isGameOver, data.opponentId);
+                console.log("Received score " + data.deviceId + "-" + data.score, data.strength, data.isGameOver, data.opponentId, data.RemoteStrength);
+                broadcastScoreUpdate(data.deviceId, data.score, data.strength, data.isGameOver, data.opponentId, data.RemoteStrength);
+                return;
+            }
+
+            // Handle second attack update
+            if (data.type === "isSecondAttack") {
+                console.log("Received isSecondAttack " + data.deviceId + "-" + data.isSecondAttack);
+                broadcastSecondAttackUpdate(data.deviceId, data.isSecondAttack);
+                return;
+            }
+
+            if (data.type === "local") {
+                console.log("LocalScoreAndStrength " + data.score + " - " + data.score);
+                broadcastLocalUpdate(data.deviceId, data.score, data.strength);
+                return;
+            }
+
+            if (data.type === "opponent") {
+                console.log("OpponentScoreAndStrength " + data.score + " - " + data.strength);
+                broadcastOpponentUpdate(data.deviceId, data.score, data.strength);
+                return;
+            }
+
+            // Handle score and Strength updates
+            if (data.type === "isShield") {
+                console.log("Received Shield status " + data.deviceId + "-" + data.isShield);
+                broadcastShieldUpdate(data.deviceId, data.isShield);
                 return;
             }
 
@@ -118,23 +144,34 @@ wss.on("connection", (ws) => {
             const roomId = connectedPlayers[deviceId];
             if (roomId) {
                 const room = gameRooms[roomId];
-                // Notify other player in the room
+
+                // Notify each player in the room about disconnection and room deletion
                 room.forEach((playerId) => {
-                    if (playerId !== deviceId && playersWs[playerId]) {
+                    if (playersWs[playerId]) {
                         playersWs[playerId].send(JSON.stringify({
-                            type: "playerDisconnected",
-                            deviceId: deviceId
+                            type: "roomDeleted",
+                            roomId: roomId,
+                            message: "The room has been deleted due to player disconnection.",
+                            disconnectedDeviceId: deviceId,
+                            isGameOver: true,
                         }));
                     }
+                    // Remove each player's WebSocket and connected status
+                    delete playersWs[playerId];
+                    delete connectedPlayers[playerId];
                 });
+
+                // After clearing players, delete the room itself
                 delete gameRooms[roomId];
+                console.log("Room " + roomId + " deleted with players " + room + " due to disconnection");
             }
-            delete playersWs[deviceId];
-            delete connectedPlayers[deviceId];
+
+            // Remove the disconnected player from waiting session queue if present
             waitingSessionQueue = waitingSessionQueue.filter(entry => entry.deviceId !== deviceId);
             console.log("Player " + deviceId + " disconnected");
         }
     });
+
 });
 
 // Broadcast position updates to other players in the same room
@@ -159,25 +196,26 @@ function broadcastPositionUpdate(sourceDeviceId, newPosition) {
 
 
 // Broadcast position updates to other players in the same room
-function broadcastScoreUpdate(sourceDeviceId, score, strength, isGameOver, opponentId) {
+function broadcastScoreUpdate(sourceDeviceId, score, strength, isGameOver, opponentId, RemoteStrength) {
     const roomId = connectedPlayers[sourceDeviceId];
     if (!roomId || !gameRooms[roomId]) return;
 
     gameRooms[roomId].forEach(targetDeviceId => {
-        if (targetDeviceId !== sourceDeviceId) {
-            const targetWs = playersWs[targetDeviceId];
-            if (targetWs) {
-                targetWs.send(JSON.stringify({
-                    type: "scoreAndStrength",
-                    deviceId: sourceDeviceId,
-                    score: score,
-                    strength: strength,
-                    isGameOver: isGameOver,
-                    opponentId: opponentId,
-                }));
-                console.log("score update sent to " + targetDeviceId + " - " + score + " - " + strength + " - " + opponentId);
-            }
+        // if (targetDeviceId !== sourceDeviceId) {
+        const targetWs = playersWs[targetDeviceId];
+        if (targetWs) {
+            targetWs.send(JSON.stringify({
+                type: "scoreAndStrength",
+                deviceId: sourceDeviceId,
+                score: score,
+                strength: strength,
+                isGameOver: isGameOver,
+                opponentId: opponentId,
+                RemoteStrength: RemoteStrength
+            }));
+            console.log("score update sent to " + targetWs + " - " + score + " - " + strength + " - " + opponentId);
         }
+        // }
     });
 }
 
@@ -200,6 +238,87 @@ function broadcastAttackUpdate(sourceDeviceId, isFirstAttack) {
         }
     });
 }
+
+// Broadcast position updates to other players in the same room
+function broadcastSecondAttackUpdate(sourceDeviceId, isSecondAttack) {
+    const roomId = connectedPlayers[sourceDeviceId];
+    if (!roomId || !gameRooms[roomId]) return;
+
+    gameRooms[roomId].forEach(targetDeviceId => {
+        if (targetDeviceId !== sourceDeviceId) {
+            const targetWs = playersWs[targetDeviceId];
+            if (targetWs) {
+                targetWs.send(JSON.stringify({
+                    type: "isSecondAttack",
+                    deviceId: sourceDeviceId,
+                    isSecondAttack: isSecondAttack
+                }));
+                console.log("Second Attack update sent to " + targetDeviceId + " - " + isSecondAttack);
+            }
+        }
+    });
+}
+
+// Broadcast position updates to other players in the same room
+function broadcastShieldUpdate(sourceDeviceId, isShield) {
+    const roomId = connectedPlayers[sourceDeviceId];
+    if (!roomId || !gameRooms[roomId]) return;
+
+    gameRooms[roomId].forEach(targetDeviceId => {
+        if (targetDeviceId !== sourceDeviceId) {
+            const targetWs = playersWs[targetDeviceId];
+            if (targetWs) {
+                targetWs.send(JSON.stringify({
+                    type: "isShield",
+                    deviceId: sourceDeviceId,
+                    isShield: isShield
+                }));
+                console.log("Second Attack update sent to " + targetDeviceId + " - " + isShield);
+            }
+        }
+    });
+}
+
+
+function broadcastLocalUpdate(sourceDeviceId, score, strength) {
+    const roomId = connectedPlayers[sourceDeviceId];
+    if (!roomId || !gameRooms[roomId]) return;
+
+    gameRooms[roomId].forEach(targetDeviceId => {
+        if (targetDeviceId !== sourceDeviceId) {
+            const targetWs = playersWs[targetDeviceId];
+            if (targetWs) {
+                targetWs.send(JSON.stringify({
+                    type: "local",
+                    deviceId: sourceDeviceId,
+                    score: score,
+                    strength: strength
+                }));
+                console.log("LocalScore" + targetDeviceId);
+            }
+        }
+    });
+}
+function broadcastOpponentUpdate(sourceDeviceId, score, strength) {
+    const roomId = connectedPlayers[sourceDeviceId];
+    if (!roomId || !gameRooms[roomId]) return;
+
+    gameRooms[roomId].forEach(targetDeviceId => {
+        if (targetDeviceId !== sourceDeviceId) {
+            const targetWs = playersWs[targetDeviceId];
+            if (targetWs) {
+                targetWs.send(JSON.stringify({
+                    type: "opponent",
+                    deviceId: sourceDeviceId,
+                    score: score,
+                    strength: strength
+                }));
+                console.log("OpponentScore " + targetDeviceId);
+            }
+        }
+    });
+}
+
 
 // Expose the WebSocket server as a Cloud Function
 // exports.websocket = functions.https.onRequest((req, res) => {

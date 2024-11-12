@@ -6,7 +6,7 @@ const WebSocket = require("ws");
 
 // Create an Express app
 const app = express();
-app.use(cors()); 
+app.use(cors());
 // Create HTTP server
 const server = http.createServer(app);
 
@@ -88,25 +88,55 @@ wss.on("connection", (ws) => {
     ws.on("close", () => {
         if (deviceId) {
             const roomId = connectedPlayers[deviceId];
+
+            console.log("Player " + deviceId + " is disconnecting...");
+            console.log("Connected players:", connectedPlayers);
+            console.log("Game rooms:", gameRooms);
+
             if (roomId) {
                 const room = gameRooms[roomId];
-                // Notify other player in the room
-                room.forEach((playerId) => {
-                    if (playerId !== deviceId && playersWs[playerId]) {
-                        playersWs[playerId].send(JSON.stringify({
-                            type: "playerDisconnected",
-                            deviceId: deviceId
-                        }));
+
+                console.log("Room ID for player:", roomId);
+                console.log("Room content:", room);
+
+                if (room) {
+                    room.forEach((playerId) => {
+                        if (playerId !== deviceId && playersWs[playerId]) {
+                            // Notify the remaining player that the other player has disconnected
+                            playersWs[playerId].send(JSON.stringify({
+                                type: "playerDisconnected",
+                                deviceId: deviceId
+                            }));
+
+                            // Optionally, disconnect the other player as well
+                            playersWs[playerId].close();
+                        }
+                    });
+
+                    // Remove the player from the room
+                    gameRooms[roomId] = room.filter(playerId => playerId !== deviceId);
+
+                    // If both players have disconnected, then delete the room
+                    if (gameRooms[roomId].length === 0) {
+                        delete gameRooms[roomId];
+                        console.log("Room " + roomId + " deleted after both players disconnected.");
                     }
-                });
-                delete gameRooms[roomId];
+                } else {
+                    console.log("No room found for roomId:", roomId);
+                }
+            } else {
+                console.log("No roomId associated with deviceId:", deviceId);
             }
+
+            // Clean up the player and connection data
             delete playersWs[deviceId];
             delete connectedPlayers[deviceId];
             waitingSessionQueue = waitingSessionQueue.filter(entry => entry.deviceId !== deviceId);
             console.log("Player " + deviceId + " disconnected");
         }
     });
+
+
 });
 
 // Broadcast position updates to other players in the same room
